@@ -31,7 +31,6 @@
   .spacer{flex:1;}
   .divider{width:1px;height:20px;background:var(--border2);margin:0 2px;}
 
-  /* Layout */
   .main-layout{display:flex;gap:12px;align-items:flex-start;}
   .cal-panel{flex:1;min-width:0;overflow-x:auto;}
   .todo-panel{width:280px;flex-shrink:0;background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);overflow:hidden;position:sticky;top:14px;max-height:calc(100vh - 100px);display:flex;flex-direction:column;}
@@ -40,23 +39,23 @@
     .todo-panel{width:100%;max-height:400px;position:static;}
   }
 
-  /* Calendar */
-  .cal-grid{display:grid;grid-template-columns:42px repeat(7,1fr);min-width:560px;}
+  .cal-grid{display:grid;grid-template-columns:48px repeat(7,1fr);min-width:580px;}
   .day-head{text-align:center;padding:5px 0 4px;font-size:10px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border);}
   .day-head.today{color:var(--accent);border-color:var(--accent);}
   .day-head .num{font-size:16px;font-weight:700;color:var(--text);margin-top:1px;}
   .day-head.today .num{color:var(--accent);}
-  .hour-label{font-size:9px;color:var(--text3);text-align:right;padding-right:5px;padding-top:2px;height:40px;border-top:1px solid #eee;font-variant-numeric:tabular-nums;}
-  .cell{height:40px;border-top:1px solid #eee;border-left:1px solid #eee;position:relative;cursor:pointer;transition:background .1s;}
+  .hour-label{font-size:9px;color:var(--text3);text-align:right;padding-right:5px;padding-top:1px;height:28px;border-top:1px solid #eee;font-variant-numeric:tabular-nums;}
+  .hour-label.on-hour{border-top:1px solid #ddd;}
+  .cell{height:28px;border-top:1px solid #f3f3f3;border-left:1px solid #f3f3f3;position:relative;cursor:pointer;transition:background .1s;}
+  .cell.on-hour{border-top:1px solid #e0e0e0;}
   .cell:hover{background:#f0eeeb;}
   .cell.today-col{background:var(--accent-light);}
   .cell.today-col:hover{background:#ddd9ff;}
   .cell.drag-over{background:#c7d2fe !important;outline:2px dashed var(--accent);outline-offset:-2px;}
-  .block{position:absolute;top:1px;left:2px;right:2px;border-radius:5px;color:#fff;font-size:9px;font-weight:600;padding:2px 5px;z-index:2;cursor:pointer;overflow:hidden;line-height:1.3;transition:transform .1s;}
+  .block{position:absolute;top:1px;left:2px;right:2px;border-radius:5px;color:#fff;font-size:9px;font-weight:600;padding:2px 5px;z-index:2;cursor:pointer;overflow:hidden;line-height:1.2;transition:transform .1s;}
   .block:hover{transform:scale(1.03);filter:brightness(1.08);}
   .block .bt{font-size:8px;opacity:.85;margin-top:1px;}
 
-  /* Todo panel */
   .tp-header{padding:10px 12px 8px;border-bottom:1.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
   .tp-header h2{font-size:14px;font-weight:700;}
   .tp-scope{display:flex;background:var(--border);border-radius:6px;padding:1.5px;}
@@ -92,7 +91,6 @@
   .add-btn:hover{border-color:var(--accent);color:var(--accent);}
   .empty{text-align:center;padding:24px 0;color:var(--text3);font-size:11px;}
 
-  /* Modal */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:100;}
   .modal{background:var(--surface);border-radius:14px;padding:20px;width:92%;max-width:340px;box-shadow:0 20px 60px rgba(0,0,0,.2);}
   .modal h3{font-size:15px;font-weight:700;margin-bottom:12px;}
@@ -178,53 +176,64 @@ const CATS={
   personal:{label:"Personal",color:"#db2777",light:"#fce7f3"},
 };
 const DAYS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-const HOURS=Array.from({length:17},(_,i)=>i+6);
-const PRI={high:{label:"High",icon:"🔴",s:0},medium:{label:"Med",icon:"🟡",s:1},low:{label:"Low",icon:"🟢",s:2}};
+const PRI={high:{label:"High",icon:"🔴"},medium:{label:"Med",icon:"🟡"},low:{label:"Low",icon:"🟢"}};
+
+// 30-min slots from 5:30am (5.5) to 11:00pm (23.0). Blocks can end at 23.5 (11:30pm).
+const SLOTS=[];
+for(let t=5.5;t<=23;t+=0.5) SLOTS.push(t);
+const END_SLOTS=[];
+for(let t=6;t<=23.5;t+=0.5) END_SLOTS.push(t);
+const CELL_H=28;
+
+function fT(t){
+  const h=Math.floor(t);const m=t%1===0.5?"30":"00";
+  const ampm=h<12?"a":h===12?"p":(h===0?"a":"p");
+  const hr=h===0?12:h>12?h-12:h;
+  return `${hr}:${m}${ampm}`;
+}
+function slotCount(start,end){return(end-start)/0.5;}
 
 let S={blocks:{},todos:{}};
 let weekStart=getMonday(new Date());
 let todoScope="daily";
 let selectedDay=(new Date().getDay()+6)%7;
-let editBlockId=null, editTodoId=null, loaded=false;
+let editBlockId=null,editTodoId=null;
 let dragTodo=null;
 
 function uid(){return Math.random().toString(36).slice(2,9);}
-function fH(h){return h===0?"12a":h===12?"12p":h<12?h+"a":(h-12)+"p";}
 function getMonday(d){const dt=new Date(d);dt.setDate(dt.getDate()-((dt.getDay()+6)%7));return dt.toISOString().split("T")[0];}
 function getWeekDates(ws){const s=new Date(ws+"T00:00:00");return DAYS.map((_,i)=>{const d=new Date(s);d.setDate(d.getDate()+i);return d;});}
 function wk(){return weekStart;}
 function wb(){return S.blocks[wk()]||[];}
 function wt(){return S.todos[wk()]||[];}
-function swb(b){S.blocks[wk()]=b;save();}
-function swt(t){S.todos[wk()]=t;save();}
+function swb(b){S.blocks[wk()]=b;persist();render();}
+function swt(t){S.todos[wk()]=t;persist();render();}
 
-async function load(){
-  try{const r=await window.storage.get("tb-v4");if(r?.value)S=JSON.parse(r.value);}catch{}
-  loaded=true;render();
-}
-async function save(){if(!loaded)return;try{await window.storage.set("tb-v4",JSON.stringify(S));}catch{} render();}
+// localStorage persistence
+function persist(){try{localStorage.setItem("tb-v5",JSON.stringify(S));}catch{}}
+function loadData(){try{const r=localStorage.getItem("tb-v5");if(r)S=JSON.parse(r);}catch{} render();}
+
 function toast(m){const e=document.getElementById("toast");e.textContent=m;e.classList.remove("hidden");setTimeout(()=>e.classList.add("hidden"),2200);}
-
 function prevWeek(){const d=new Date(weekStart+"T00:00:00");d.setDate(d.getDate()-7);weekStart=d.toISOString().split("T")[0];render();}
 function nextWeek(){const d=new Date(weekStart+"T00:00:00");d.setDate(d.getDate()+7);weekStart=d.toISOString().split("T")[0];render();}
 function goToday(){weekStart=getMonday(new Date());selectedDay=(new Date().getDay()+6)%7;render();}
 
-async function saveTemplate(){
+function saveTemplate(){
   try{
     const cb=wb().map(({id,fromTemplate,...r})=>r);
     const ct=wt().map(({id,fromTemplate,done,...r})=>r);
-    await window.storage.set("tb-tpl-v4",JSON.stringify({blocks:cb,todos:ct}));
+    localStorage.setItem("tb-tpl-v5",JSON.stringify({blocks:cb,todos:ct}));
     toast("Saved as template!");
   }catch{toast("Error saving");}
 }
-async function applyTemplate(){
+function applyTemplate(){
   try{
-    const r=await window.storage.get("tb-tpl-v4");
-    if(r?.value){
-      const t=JSON.parse(r.value);
+    const r=localStorage.getItem("tb-tpl-v5");
+    if(r){
+      const t=JSON.parse(r);
       S.blocks[wk()]=[...wb().filter(b=>!b.fromTemplate),...(t.blocks||[]).map(b=>({...b,id:uid(),fromTemplate:true}))];
       S.todos[wk()]=[...wt().filter(x=>!x.fromTemplate),...(t.todos||[]).map(x=>({...x,id:uid(),fromTemplate:true,done:false}))];
-      save();toast("Template applied!");
+      persist();render();toast("Template applied!");
     }else toast("No template saved yet");
   }catch{toast("Error loading");}
 }
@@ -236,7 +245,7 @@ function carryForward(){
   const titles=new Set(wt().map(t=>t.title));
   const add=uf.filter(t=>!titles.has(t.title)).map(t=>({...t,id:uid(),done:false,carried:true}));
   if(!add.length){toast("Already carried over");return;}
-  S.todos[wk()]=[...add,...wt()];save();toast(`Carried ${add.length} task${add.length>1?"s":""} forward!`);
+  S.todos[wk()]=[...add,...wt()];persist();render();toast(`Carried ${add.length} task${add.length>1?"s":""} forward!`);
 }
 
 function scopedTodos(){
@@ -244,24 +253,25 @@ function scopedTodos(){
 }
 
 // Block modal
-function openBlockModal(mode,dayIdx,hour,block){
+function openBlockModal(mode,dayIdx,slot,block){
   editBlockId=block?.id||null;
   document.getElementById("bmTitle2").textContent=mode==="add"?"Add Block":"Edit Block";
   document.getElementById("bmTitle").value=block?.title||"";
   document.getElementById("bmDel").classList.toggle("hidden",mode==="add");
   buildCatPicker("bmCats",block?.category||"school");
   const ss=document.getElementById("bmStart"),es=document.getElementById("bmEnd"),ds=document.getElementById("bmDay");
-  ss.innerHTML=HOURS.map(h=>`<option value="${h}"${h===(block?.startHour??hour)?" selected":""}>${fH(h)}</option>`).join("");
-  es.innerHTML=HOURS.filter(h=>h>(block?.startHour??hour)).map(h=>`<option value="${h}"${h===(block?.endHour??(hour+1))?" selected":""}>${fH(h)}</option>`).join("");
+  ss.innerHTML=SLOTS.map(s=>`<option value="${s}"${s===(block?.start??slot)?" selected":""}>${fT(s)}</option>`).join("");
+  const startVal=block?.start??slot;
+  es.innerHTML=END_SLOTS.filter(s=>s>startVal).map(s=>`<option value="${s}"${s===(block?.end??(startVal+0.5))?" selected":""}>${fT(s)}</option>`).join("");
   ds.innerHTML=DAYS.map((d,i)=>`<option value="${i}"${i===(block?.dayIdx??dayIdx)?" selected":""}>${d}</option>`).join("");
-  ss.onchange=()=>{const v=+ss.value;es.innerHTML=HOURS.filter(h=>h>v).map(h=>`<option value="${h}">${fH(h)}</option>`).join("");};
+  ss.onchange=()=>{const v=+ss.value;es.innerHTML=END_SLOTS.filter(s=>s>v).map(s=>`<option value="${s}">${fT(s)}</option>`).join("");};
   document.getElementById("blockModal").classList.remove("hidden");
   document.getElementById("bmTitle").focus();
 }
 function closeBlockModal(){document.getElementById("blockModal").classList.add("hidden");}
 function saveBlock(){
   const cat=document.querySelector("#bmCats .cat-opt.active")?.dataset.cat||"school";
-  const d={dayIdx:+document.getElementById("bmDay").value,startHour:+document.getElementById("bmStart").value,endHour:+document.getElementById("bmEnd").value,category:cat,title:document.getElementById("bmTitle").value||CATS[cat].label};
+  const d={dayIdx:+document.getElementById("bmDay").value,start:+document.getElementById("bmStart").value,end:+document.getElementById("bmEnd").value,category:cat,title:document.getElementById("bmTitle").value||CATS[cat].label};
   if(editBlockId)swb(wb().map(b=>b.id===editBlockId?{...b,...d}:b));
   else swb([...wb(),{...d,id:uid()}]);
   closeBlockModal();
@@ -292,7 +302,6 @@ function saveTodo(){
 function deleteTodo(){swt(wt().filter(t=>t.id!==editTodoId));closeTodoModal();}
 function toggleTodo(id){swt(wt().map(t=>t.id===id?{...t,done:!t.done}:t));}
 
-// Pickers
 function buildCatPicker(cid,active){
   document.getElementById(cid).innerHTML=Object.entries(CATS).map(([k,v])=>{
     const a=k===active;
@@ -316,7 +325,7 @@ function pickPri(k){document.querySelectorAll("#tmPri .pri-opt").forEach(b=>b.cl
 
 function esc(s){const d=document.createElement("div");d.textContent=s;return d.innerHTML;}
 
-// ---- DRAG AND DROP ----
+// Drag and drop
 function onDragStartTodo(e,todoId){
   dragTodo=wt().find(t=>t.id===todoId);
   e.dataTransfer.effectAllowed="copy";
@@ -326,22 +335,20 @@ function onDragStartTodo(e,todoId){
 function onDragEndTodo(e){e.target.classList.remove("dragging");dragTodo=null;}
 function onDragOverCell(e){e.preventDefault();e.dataTransfer.dropEffect="copy";e.currentTarget.classList.add("drag-over");}
 function onDragLeaveCell(e){e.currentTarget.classList.remove("drag-over");}
-function onDropCell(e,dayIdx,hour){
+function onDropCell(e,dayIdx,slot){
   e.preventDefault();e.currentTarget.classList.remove("drag-over");
   if(!dragTodo)return;
   const cat=dragTodo.category||"school";
-  const newBlock={id:uid(),dayIdx,startHour:hour,endHour:hour+1,category:cat,title:dragTodo.title};
-  // Open modal pre-filled so user can adjust duration
   editBlockId=null;
   document.getElementById("bmTitle2").textContent="Add Block";
   document.getElementById("bmTitle").value=dragTodo.title;
   document.getElementById("bmDel").classList.add("hidden");
   buildCatPicker("bmCats",cat);
   const ss=document.getElementById("bmStart"),es=document.getElementById("bmEnd"),ds=document.getElementById("bmDay");
-  ss.innerHTML=HOURS.map(h=>`<option value="${h}"${h===hour?" selected":""}>${fH(h)}</option>`).join("");
-  es.innerHTML=HOURS.filter(h=>h>hour).map(h=>`<option value="${h}"${h===hour+1?" selected":""}>${fH(h)}</option>`).join("");
+  ss.innerHTML=SLOTS.map(s=>`<option value="${s}"${s===slot?" selected":""}>${fT(s)}</option>`).join("");
+  es.innerHTML=END_SLOTS.filter(s=>s>slot).map(s=>`<option value="${s}"${s===slot+1?" selected":""}>${fT(s)}</option>`).join("");
   ds.innerHTML=DAYS.map((d,i)=>`<option value="${i}"${i===dayIdx?" selected":""}>${d}</option>`).join("");
-  ss.onchange=()=>{const v=+ss.value;es.innerHTML=HOURS.filter(h=>h>v).map(h=>`<option value="${h}">${fH(h)}</option>`).join("");};
+  ss.onchange=()=>{const v=+ss.value;es.innerHTML=END_SLOTS.filter(s=>s>v).map(s=>`<option value="${s}">${fT(s)}</option>`).join("");};
   document.getElementById("blockModal").classList.remove("hidden");
   dragTodo=null;
 }
@@ -358,7 +365,6 @@ function render(){
   document.getElementById("catBadges").innerHTML=Object.entries(CATS).map(([k,v])=>
     `<span class="cat-badge" style="background:${v.light};color:${v.color};border:1.5px solid ${v.color}30">${v.label}</span>`).join("");
   document.getElementById("todayBtn").className=isThis?"btn accent":"btn";
-
   renderCal(dates,tIdx);
   renderTodos(dates,tIdx);
 }
@@ -367,17 +373,20 @@ function renderCal(dates,tIdx){
   const blocks=wb();
   let h=`<div class="cal-grid"><div></div>`;
   DAYS.forEach((d,i)=>h+=`<div class="day-head${tIdx===i?" today":""}">${d}<div class="num">${dates[i].getDate()}</div></div>`);
-  HOURS.forEach(hr=>{
-    h+=`<div class="hour-label">${fH(hr)}</div>`;
+  SLOTS.forEach(slot=>{
+    const isOnHour=slot%1===0;
+    const label=isOnHour?fT(slot):(slot===5.5?fT(slot):"");
+    h+=`<div class="hour-label${isOnHour?" on-hour":""}">${label}</div>`;
     DAYS.forEach((_,di)=>{
       const isT=tIdx===di;
-      const starts=blocks.filter(b=>b.dayIdx===di&&b.startHour===hr);
+      const starts=blocks.filter(b=>b.dayIdx===di&&b.start===slot);
       let inner="";
       starts.forEach(b=>{
-        const c=CATS[b.category];const sp=b.endHour-b.startHour;
-        inner+=`<div class="block" style="height:${sp*40-3}px;background:${c.color};box-shadow:0 1px 3px ${c.color}40" onclick="event.stopPropagation();openBlockModal('edit',${di},${hr},${JSON.stringify(b).replace(/"/g,'&quot;')})"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.title||c.label)}</div>${sp>1?`<div class="bt">${fH(b.startHour)}–${fH(b.endHour)}</div>`:""}</div>`;
+        const c=CATS[b.category];const spans=slotCount(b.start,b.end);
+        const px=spans*CELL_H-3;
+        inner+=`<div class="block" style="height:${px}px;background:${c.color};box-shadow:0 1px 3px ${c.color}40" onclick="event.stopPropagation();openBlockModal('edit',${di},${slot},${JSON.stringify(b).replace(/"/g,'&quot;')})"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.title||c.label)}</div>${spans>2?`<div class="bt">${fT(b.start)}–${fT(b.end)}</div>`:""}</div>`;
       });
-      h+=`<div class="cell${isT?" today-col":""}" onclick="openBlockModal('add',${di},${hr})" ondragover="onDragOverCell(event)" ondragleave="onDragLeaveCell(event)" ondrop="onDropCell(event,${di},${hr})">${inner}</div>`;
+      h+=`<div class="cell${isT?" today-col":""}${isOnHour?" on-hour":""}" onclick="openBlockModal('add',${di},${slot})" ondragover="onDragOverCell(event)" ondragleave="onDragLeaveCell(event)" ondrop="onDropCell(event,${di},${slot})">${inner}</div>`;
     });
   });
   h+=`</div>`;
@@ -437,7 +446,7 @@ function renderTodos(dates,tIdx){
   document.getElementById("todoPanel").innerHTML=h;
 }
 
-load();
+loadData();
 </script>
 </body>
 </html>
