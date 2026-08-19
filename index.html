@@ -237,18 +237,16 @@ function goToday(){weekStart=getMonday(new Date());selectedDay=(new Date().getDa
 function saveTemplate(){
   try{
     const cb=wb().map(({id,fromTemplate,...r})=>r);
-    const ct=wt().map(({id,fromTemplate,done,...r})=>r);
-    localStorage.setItem("tb-tpl-v5",JSON.stringify({blocks:cb,todos:ct}));
-    toast("Saved as template!");
+    localStorage.setItem("tb-tpl-v6",JSON.stringify({blocks:cb}));
+    toast("Template saved!");
   }catch{toast("Error saving");}
 }
 function applyTemplate(){
   try{
-    const r=localStorage.getItem("tb-tpl-v5");
+    const r=localStorage.getItem("tb-tpl-v6");
     if(r){
       const t=JSON.parse(r);
       S.blocks[wk()]=[...wb().filter(b=>!b.fromTemplate),...(t.blocks||[]).map(b=>({...b,id:uid(),fromTemplate:true}))];
-      S.todos[wk()]=[...wt().filter(x=>!x.fromTemplate),...(t.todos||[]).map(x=>({...x,id:uid(),fromTemplate:true,done:false}))];
       persist();render();toast("Template applied!");
     }else toast("No template saved yet");
   }catch{toast("Error loading");}
