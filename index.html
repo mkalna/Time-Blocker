@@ -213,15 +213,19 @@ function swb(b){S.blocks[wk()]=b;persist();render();}
 function swt(t){S.todos[wk()]=t;persist();render();}
 
 // localStorage persistence
-function persist(){try{localStorage.setItem("tb-v6",JSON.stringify(S));}catch{}}
+function persist(){try{localStorage.setItem("tb-v7",JSON.stringify(S));}catch{}}
 function loadData(){
-  try{const r=localStorage.getItem("tb-v6");if(r)S=JSON.parse(r);}catch{}
-  // Seed class schedule if no blocks exist yet
-  if(!Object.keys(S.blocks).length){
-    Object.entries(DEFAULT_BLOCKS).forEach(([wk,blocks])=>{
-      S.blocks[wk]=(S.blocks[wk]||[]).concat(blocks.map(b=>({...b,id:uid()})));
+  try{const r=localStorage.getItem("tb-v7");if(r)S=JSON.parse(r);}catch{}
+  // Always ensure class schedule blocks are present
+  Object.entries(DEFAULT_BLOCKS).forEach(([wk,defBlocks])=>{
+    if(!S.blocks[wk]) S.blocks[wk]=[];
+    const existing=S.blocks[wk];
+    defBlocks.forEach(db=>{
+      // Check if this class block already exists (by title match)
+      const alreadyThere=existing.some(b=>b.title===db.title && b.locked);
+      if(!alreadyThere) existing.push({...db,id:uid()});
     });
-  }
+  });
   render();
 }
 
